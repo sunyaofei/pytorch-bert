@@ -260,7 +260,7 @@ if __name__ == '__main__':
     print('hello bert')
     pwd = os.getenv("PWD")
     
-    
+    pretrained_model_name = pwd + '/bert-base-uncased'
     # 加载预训练模型对应的tokenizer
     tokenizer = BertTokenizer.from_pretrained(pretrained_model_name)
     

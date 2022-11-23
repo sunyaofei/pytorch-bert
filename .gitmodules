@@ -1,0 +1,3 @@
+[submodule "thirdparty/bert-base-uncased"]
+	path = bert-base-uncased
+	url = https://huggingface.co/bert-base-uncased

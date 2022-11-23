@@ -112,7 +112,8 @@ class BertDataset(Dataset):
         # 这里我设置 self.dataset[index] 规定了数据是按序号取得，序号是多少DataLoader自己算，用户不用操心
         return self.dataset[index]
 
-
+global tokenizer
+global pretrained_model_name
 def coffate_fn(examples):
     inputs, targets = [], []
     for polar, sent in examples:
@@ -159,6 +160,7 @@ def load(data_path):
     test_dataloader = DataLoader(test_dataset,
                                 batch_size=1,
                                 collate_fn=coffate_fn)
+    
     return train_dataloader, test_dataloader, categories
 
 
@@ -174,14 +176,12 @@ def train(train_dataloader, test_dataloader, categories):
     # 加载预训练模型，因为这里是英文数据集，需要用在英文上的预训练模型：bert-base-uncased
     # uncased指该预训练模型对应的词表不区分字母的大小写
     # 详情可了解：https://huggingface.co/bert-base-uncased
-    pretrained_model_name = 'bert-base-uncased'
+    # pretrained_model_name = 'bert-base-uncased'
     # 创建模型 BertSST2Model
     model = BertSST2Model(len(categories), pretrained_model_name)
     # 固定写法，将模型加载到device上，
     # 如果是GPU上运行，此时可以观察到GPU的显存增加
     model.to(device)
-    # 加载预训练模型对应的tokenizer
-    tokenizer = BertTokenizer.from_pretrained(pretrained_model_name)
 
     # 训练过程
     # Adam是最近较为常用的优化器，详情可查看：https://www.jianshu.com/p/aebcaf8af76e
@@ -259,6 +259,12 @@ def train(train_dataloader, test_dataloader, categories):
 if __name__ == '__main__':
     print('hello bert')
     pwd = os.getenv("PWD")
+    
+    
+    # 加载预训练模型对应的tokenizer
+    tokenizer = BertTokenizer.from_pretrained(pretrained_model_name)
+    
     data_path = pwd + '/bert-sst2/sst2_shuffled.tsv'
     train_dataloader, test_dataloader, categories = load(data_path=data_path)
+    
     train(train_dataloader, test_dataloader, categories)

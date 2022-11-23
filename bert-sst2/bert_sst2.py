@@ -127,126 +127,138 @@ def coffate_fn(examples):
     return inputs, targets
 
 
-# 训练准备阶段，设置超参数和全局变量
+def load(data_path):
+    # 训练准备阶段，设置超参数和全局变量
+    batch_size = 8
+    # data_path = "./sst2_shuffled.tsv"  # 数据所在地址
+    train_ratio = 0.8  # 训练集比例
 
-batch_size = 8
-num_epoch = 5  # 训练轮次
-check_step = 1  # 用以训练中途对模型进行检验：每check_step个epoch进行一次测试和保存模型
-data_path = "./sst2_shuffled.tsv"  # 数据所在地址
-train_ratio = 0.8  # 训练集比例
-learning_rate = 1e-5  # 优化器的学习率
+    # 获取训练、测试数据、分类类别总数
+    train_data, test_data, categories = load_sentence_polarity(
+        data_path=data_path, train_ratio=train_ratio)
 
-# 获取训练、测试数据、分类类别总数
-train_data, test_data, categories = load_sentence_polarity(
-    data_path=data_path, train_ratio=train_ratio)
+    # 将训练数据和测试数据的列表封装成Dataset以供DataLoader加载
+    train_dataset = BertDataset(train_data)
+    test_dataset = BertDataset(test_data)
+    """
+    DataLoader主要有以下几个参数：
+    Args:
+        dataset (Dataset): dataset from which to load the data.
+        batch_size (int, optional): how many samples per batch to load(default: ``1``).
+        shuffle (bool, optional): set to ``True`` to have the data reshuffled at every epoch (default: ``False``).
+        collate_fn : 传入一个处理数据的回调函数
+    DataLoader工作流程：
+    1. 先从dataset中取出batch_size个数据
+    2. 对每个batch，执行collate_fn传入的函数以改变成为适合模型的输入
+    3. 下个epoch取数据前先对当前的数据集进行shuffle，以防模型学会数据的顺序而导致过拟合
+    """
+    train_dataloader = DataLoader(train_dataset,
+                                batch_size=batch_size,
+                                collate_fn=coffate_fn,
+                                shuffle=True)
+    test_dataloader = DataLoader(test_dataset,
+                                batch_size=1,
+                                collate_fn=coffate_fn)
+    return train_dataloader, test_dataloader, categories
 
-# 将训练数据和测试数据的列表封装成Dataset以供DataLoader加载
-train_dataset = BertDataset(train_data)
-test_dataset = BertDataset(test_data)
-"""
-DataLoader主要有以下几个参数：
-Args:
-    dataset (Dataset): dataset from which to load the data.
-    batch_size (int, optional): how many samples per batch to load(default: ``1``).
-    shuffle (bool, optional): set to ``True`` to have the data reshuffled at every epoch (default: ``False``).
-    collate_fn : 传入一个处理数据的回调函数
-DataLoader工作流程：
-1. 先从dataset中取出batch_size个数据
-2. 对每个batch，执行collate_fn传入的函数以改变成为适合模型的输入
-3. 下个epoch取数据前先对当前的数据集进行shuffle，以防模型学会数据的顺序而导致过拟合
-"""
-train_dataloader = DataLoader(train_dataset,
-                              batch_size=batch_size,
-                              collate_fn=coffate_fn,
-                              shuffle=True)
-test_dataloader = DataLoader(test_dataset,
-                             batch_size=1,
-                             collate_fn=coffate_fn)
 
-#固定写法，可以牢记，cuda代表Gpu
-# torch.cuda.is_available()可以查看当前Gpu是否可用
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def train(train_dataloader, test_dataloader, categories):
+    num_epoch = 5  # 训练轮次
+    check_step = 1  # 用以训练中途对模型进行检验：每check_step个epoch进行一次测试和保存模型
+    learning_rate = 1e-5  # 优化器的学习率
 
-# 加载预训练模型，因为这里是英文数据集，需要用在英文上的预训练模型：bert-base-uncased
-# uncased指该预训练模型对应的词表不区分字母的大小写
-# 详情可了解：https://huggingface.co/bert-base-uncased
-pretrained_model_name = 'bert-base-uncased'
-# 创建模型 BertSST2Model
-model = BertSST2Model(len(categories), pretrained_model_name)
-# 固定写法，将模型加载到device上，
-# 如果是GPU上运行，此时可以观察到GPU的显存增加
-model.to(device)
-# 加载预训练模型对应的tokenizer
-tokenizer = BertTokenizer.from_pretrained(pretrained_model_name)
+    #固定写法，可以牢记，cuda代表Gpu
+    # torch.cuda.is_available()可以查看当前Gpu是否可用
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# 训练过程
-# Adam是最近较为常用的优化器，详情可查看：https://www.jianshu.com/p/aebcaf8af76e
-optimizer = Adam(model.parameters(), learning_rate)  #使用Adam优化器
-CE_loss = nn.CrossEntropyLoss()  # 使用crossentropy作为二分类任务的损失函数
+    # 加载预训练模型，因为这里是英文数据集，需要用在英文上的预训练模型：bert-base-uncased
+    # uncased指该预训练模型对应的词表不区分字母的大小写
+    # 详情可了解：https://huggingface.co/bert-base-uncased
+    pretrained_model_name = 'bert-base-uncased'
+    # 创建模型 BertSST2Model
+    model = BertSST2Model(len(categories), pretrained_model_name)
+    # 固定写法，将模型加载到device上，
+    # 如果是GPU上运行，此时可以观察到GPU的显存增加
+    model.to(device)
+    # 加载预训练模型对应的tokenizer
+    tokenizer = BertTokenizer.from_pretrained(pretrained_model_name)
 
-# 记录当前训练时间，用以记录日志和存储
-timestamp = time.strftime("%m_%d_%H_%M", time.localtime())
+    # 训练过程
+    # Adam是最近较为常用的优化器，详情可查看：https://www.jianshu.com/p/aebcaf8af76e
+    optimizer = Adam(model.parameters(), learning_rate)  #使用Adam优化器
+    CE_loss = nn.CrossEntropyLoss()  # 使用crossentropy作为二分类任务的损失函数
 
-# 开始训练，model.train()固定写法，详情可以百度
-model.train()
-for epoch in range(1, num_epoch + 1):
-    # 记录当前epoch的总loss
-    total_loss = 0
-    # tqdm用以观察训练进度，在console中会打印出进度条
+    # 记录当前训练时间，用以记录日志和存储
+    timestamp = time.strftime("%m_%d_%H_%M", time.localtime())
 
-    for batch in tqdm(train_dataloader, desc=f"Training Epoch {epoch}"):
-        # tqdm(train_dataloader, desc=f"Training Epoch {epoch}") 会自动执行DataLoader的工作流程，
-        # 想要知道内部如何工作可以在debug时将断点打在 coffate_fn 函数内部，查看数据的处理过程
+    # 开始训练，model.train()固定写法，详情可以百度
+    model.train()
+    for epoch in range(1, num_epoch + 1):
+        # 记录当前epoch的总loss
+        total_loss = 0
+        # tqdm用以观察训练进度，在console中会打印出进度条
 
-        # 对batch中的每条tensor类型数据，都执行.to(device)，
-        # 因为模型和数据要在同一个设备上才能运行
-        inputs, targets = [x.to(device) for x in batch]
+        for batch in tqdm(train_dataloader, desc=f"Training Epoch {epoch}"):
+            # tqdm(train_dataloader, desc=f"Training Epoch {epoch}") 会自动执行DataLoader的工作流程，
+            # 想要知道内部如何工作可以在debug时将断点打在 coffate_fn 函数内部，查看数据的处理过程
 
-        # 清除现有的梯度
-        optimizer.zero_grad()
+            # 对batch中的每条tensor类型数据，都执行.to(device)，
+            # 因为模型和数据要在同一个设备上才能运行
+            inputs, targets = [x.to(device) for x in batch]
 
-        # 模型前向传播，model(inputs)等同于model.forward(inputs)
-        bert_output = model(inputs)
+            # 清除现有的梯度
+            optimizer.zero_grad()
 
-        # 计算损失，交叉熵损失计算可参考：https://zhuanlan.zhihu.com/p/159477597
-        loss = CE_loss(bert_output, targets)
-
-        # 梯度反向传播
-        loss.backward()
-
-        # 根据反向传播的值更新模型的参数
-        optimizer.step()
-
-        # 统计总的损失，.item()方法用于取出tensor中的值
-        total_loss += loss.item()
-
-    #测试过程
-    # acc统计模型在测试数据上分类结果中的正确个数
-    acc = 0
-    for batch in tqdm(test_dataloader, desc=f"Testing"):
-        inputs, targets = [x.to(device) for x in batch]
-        # with torch.no_grad(): 为固定写法，
-        # 这个代码块中的全部有关tensor的操作都不产生梯度。目的是节省时间和空间，不加也没事
-        with torch.no_grad():
+            # 模型前向传播，model(inputs)等同于model.forward(inputs)
             bert_output = model(inputs)
-            """
-            .argmax()用于取出一个tensor向量中的最大值对应的下表序号，dim指定了维度
-            假设 bert_output为3*2的tensor：
-            tensor
-            [
-                [3.2,1.1],
-                [0.4,0.6],
-                [-0.1,0.2]
-            ]
-            则 bert_output.argmax(dim=1) 的结果为：tensor[0,1,1]
-            """
-            acc += (bert_output.argmax(dim=1) == targets).sum().item()
-    #输出在测试集上的准确率
-    print(f"Acc: {acc / len(test_dataloader):.2f}")
 
-    if epoch % check_step == 0:
-        # 保存模型
-        checkpoints_dirname = "bert_sst2_" + timestamp
-        os.makedirs(checkpoints_dirname, exist_ok=True)
-        save_pretrained(model,
-                        checkpoints_dirname + '/checkpoints-{}/'.format(epoch))
+            # 计算损失，交叉熵损失计算可参考：https://zhuanlan.zhihu.com/p/159477597
+            loss = CE_loss(bert_output, targets)
+
+            # 梯度反向传播
+            loss.backward()
+
+            # 根据反向传播的值更新模型的参数
+            optimizer.step()
+
+            # 统计总的损失，.item()方法用于取出tensor中的值
+            total_loss += loss.item()
+
+        #测试过程
+        # acc统计模型在测试数据上分类结果中的正确个数
+        acc = 0
+        for batch in tqdm(test_dataloader, desc=f"Testing"):
+            inputs, targets = [x.to(device) for x in batch]
+            # with torch.no_grad(): 为固定写法，
+            # 这个代码块中的全部有关tensor的操作都不产生梯度。目的是节省时间和空间，不加也没事
+            with torch.no_grad():
+                bert_output = model(inputs)
+                """
+                .argmax()用于取出一个tensor向量中的最大值对应的下表序号，dim指定了维度
+                假设 bert_output为3*2的tensor：
+                tensor
+                [
+                    [3.2,1.1],
+                    [0.4,0.6],
+                    [-0.1,0.2]
+                ]
+                则 bert_output.argmax(dim=1) 的结果为：tensor[0,1,1]
+                """
+                acc += (bert_output.argmax(dim=1) == targets).sum().item()
+        #输出在测试集上的准确率
+        print(f"Acc: {acc / len(test_dataloader):.2f}")
+
+        if epoch % check_step == 0:
+            # 保存模型
+            checkpoints_dirname = "bert_sst2_" + timestamp
+            os.makedirs(checkpoints_dirname, exist_ok=True)
+            save_pretrained(model,
+                            checkpoints_dirname + '/checkpoints-{}/'.format(epoch))
+
+
+if __name__ == '__main__':
+    print('hello bert')
+    pwd = os.getenv("PWD")
+    data_path = pwd + '/bert-sst2/sst2_shuffled.tsv'
+    train_dataloader, test_dataloader, categories = load(data_path=data_path)
+    train(train_dataloader, test_dataloader, categories)

@@ -32,3 +32,16 @@ if __name__ == '__main__':
     # tensor([1])
     print(r.argmax(dim=1).item())
     # 1
+    
+    
+    # mirror='https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models')
+
+    from huggingface_hub import snapshot_download
+    from transformers import AutoModel
+    # snapshot_download(repo_id="bert-base-chinese", cache_dir="./tmp")
+    # snapshot_download(repo_id="bert-base-chinese", cache_dir="./tmp", ignore_regex=['*.h5', '*.ot', '*.msgpack'])
+    # AutoModel.from_pretrained("bert-base-chinese",  mirror='https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models')
+    # AutoModel.from_pretrained("bert-base-chinese",  mirror='tuna')
+    
+    
+    

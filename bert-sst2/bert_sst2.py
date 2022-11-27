@@ -12,6 +12,7 @@ from tqdm import tqdm
 import os
 import time
 from transformers import BertTokenizer
+from transformers import BertConfig
 from transformers import logging
 
 # 设置transformers模块的日志等级，减少不必要的警告，对训练过程无影响，请忽略
@@ -34,16 +35,21 @@ class BertSST2Model(nn.Module):
             pretrained_name :用以指定bert的预训练模型
         """
         # 类继承的初始化，固定写法
-        super(BertSST2Model, self).__init__()
+        super(BertSST2Model, self).__init__() 
+        
         # 加载HuggingFace的BertModel
         # BertModel的最终输出维度默认为768
         # return_dict=True 可以使BertModel的输出具有dict属性，即以 bert_output['last_hidden_state'] 方式调用
         # https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel
-        self.bert = BertModel.from_pretrained(pretrained_name,
-                                              return_dict=True)
+        # self.config = BertConfig.from_pretrained(pretrained_name, output_hidden_states=True)
+        # self.config = BertConfig.from_pretrained(pretrained_name)
+        # self.bert = BertModel.from_pretrained(pretrained_name, return_dict=True, config=config)
+        self.bert = BertModel.from_pretrained(pretrained_name)
+        # self.bert = BertModel.from_pretrained(pretrained_name, return_dict=True, config=self.config)
         # 通过一个线性层将[CLS]标签对应的维度：768->class_size
         # class_size 在SST-2情感分类任务中设置为：2
         self.classifier = nn.Linear(768, class_size)
+        # self.classifier = nn.Linear(self.config.hidden_size, class_size)
 
     def forward(self, inputs):
         # 获取DataLoader中已经处理好的输入数据：
@@ -62,14 +68,15 @@ class BertSST2Model(nn.Module):
         categories_numberic = self.classifier(output.pooler_output)
         return categories_numberic
 
-
+# https://pytorch.org/tutorials/beginner/saving_loading_models.html
 def save_pretrained(model, path):
     # 保存模型，先利用os模块创建文件夹，后利用torch.save()写入模型文件
     os.makedirs(path, exist_ok=True)
     torch.save(model, os.path.join(path, 'model.pth'))
+    torch.save(model.state_dict(), os.path.join(path, 'model_state.pth'))
+    
 
-
-def load_sentence_polarity(data_path, train_ratio=0.8):
+def load_sentence_polarity(data_path, num=None, train_ratio=0.8):
     # 本任务中暂时只用train、test做划分，不包含dev验证集，
     # train的比例由train_ratio参数指定，train_ratio=0.8代表训练语料占80%，test占20%
     # 本函数只适用于读取指定文件，不具通用性，仅作示范
@@ -86,9 +93,16 @@ def load_sentence_polarity(data_path, train_ratio=0.8):
             categories.add(polar)
             all_data.append((polar, sent))
     length = len(all_data)
+    if num:
+        length = num
+        categories.clear()
+        import random
+        random.shuffle(all_data)
+        for polar,_ in all_data[:num]:
+            categories.add(polar)
     train_len = int(length * train_ratio)
     train_data = all_data[:train_len]
-    test_data = all_data[train_len:]
+    test_data = all_data[train_len:length]
     return train_data, test_data, categories
 
 
@@ -129,15 +143,16 @@ def coffate_fn(examples):
     return inputs, targets
 
 
-def load(data_path):
+def load(data_path, num=None, batch_size = 8, train_ratio = 0.8):
     # 训练准备阶段，设置超参数和全局变量
-    batch_size = 8
+    # batch_size = 8
     # data_path = "./sst2_shuffled.tsv"  # 数据所在地址
-    train_ratio = 0.8  # 训练集比例
+    # train_ratio = 0.8  # 训练集比例
 
     # 获取训练、测试数据、分类类别总数
     train_data, test_data, categories = load_sentence_polarity(
-        data_path=data_path, train_ratio=train_ratio)
+        data_path=data_path, num=num, train_ratio=train_ratio)
+    
 
     # 将训练数据和测试数据的列表封装成Dataset以供DataLoader加载
     train_dataset = BertDataset(train_data)
@@ -165,8 +180,8 @@ def load(data_path):
     return train_dataloader, test_dataloader, categories
 
 
-def train(train_dataloader, test_dataloader, categories):
-    num_epoch = 5  # 训练轮次
+def train(train_dataloader, test_dataloader, categories, num_epoch = 5):
+    # num_epoch = 5  # 训练轮次
     check_step = 1  # 用以训练中途对模型进行检验：每check_step个epoch进行一次测试和保存模型
     learning_rate = 1e-5  # 优化器的学习率
 
@@ -248,7 +263,6 @@ def train(train_dataloader, test_dataloader, categories):
                 acc += (bert_output.argmax(dim=1) == targets).sum().item()
         #输出在测试集上的准确率
         print(f"Acc: {acc / len(test_dataloader):.2f}")
-
         if epoch % check_step == 0:
             # 保存模型
             checkpoints_dirname = "bert_sst2_" + timestamp

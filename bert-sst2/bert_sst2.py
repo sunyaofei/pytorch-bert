@@ -38,6 +38,7 @@ class BertSST2Model(nn.Module):
         # 加载HuggingFace的BertModel
         # BertModel的最终输出维度默认为768
         # return_dict=True 可以使BertModel的输出具有dict属性，即以 bert_output['last_hidden_state'] 方式调用
+        # https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel
         self.bert = BertModel.from_pretrained(pretrained_name,
                                               return_dict=True)
         # 通过一个线性层将[CLS]标签对应的维度：768->class_size

@@ -12,12 +12,17 @@ import bert_sst2 as bt
 def preprocess(raw_data_path, data_path):
     formated = open(data_path, 'w')
     cnt=1
+    lines = []
     with open(raw_data_path, 'r') as raw:
         for l in raw.readlines():
             if not l[0] in '0123':
                 continue
-            formated.write(l[0] + '\t' + l[2:])
+            # formated.write(l[0] + '\t' + l[2:])
+            lines.append(l[0] + '\t' + l[2:])
             cnt += 1
+    import random
+    random.shuffle(lines)
+    formated.writelines(lines)
     formated.close()
 
 
@@ -37,6 +42,8 @@ def eval(pretrained_model_name, model_path, texts):
     m=torch.load(model_path)
     model.load_state_dict(m)
     model.eval()
+    
+    # model = torch.load(model_path)
     r = model(inputs)
     print(r)
     print(r.argmax(dim=1))
@@ -55,19 +62,21 @@ if __name__ == '__main__':
     bt.tokenizer = BertTokenizer.from_pretrained(pretrained_model_name)
     
     # 数据预处理
-    preprocess(raw_data_path, data_path)
+    # preprocess(raw_data_path, data_path)
     
-    # train_dataloader, test_dataloader, categories = bt.load(data_path, num=1000)
-    train_dataloader, test_dataloader, categories = bt.load(data_path, num=None)
+    # train_dataloader, test_dataloader, categories = bt.load(data_path, num=5000)
     # bt.train(train_dataloader, test_dataloader, categories, num_epoch=1)
-    bt.train(train_dataloader, test_dataloader, categories, num_epoch=5)
     
-    # model_path = '/root/nlp/pytorch-bert/bert_sst2_11_27_22_07/checkpoints-1/model_state.pth'
-    # mood = eval(pretrained_model_name, model_path, 
-    #             ['今天真是个鬼天气', 
-    #              '社会主义好'
-    #              ])
-    # print(mood)
+    # train_dataloader, test_dataloader, categories = bt.load(data_path, num=None)
+    # bt.train(train_dataloader, test_dataloader, categories, num_epoch=5)
+    
+    model_path = '/root/nlp/pytorch-bert/bert_sst2_12_08_09_57/checkpoints-1/model_state.pth'
+    # model_path = '/root/nlp/pytorch-bert/bert_sst2_11_27_23_17/checkpoints-1/model.pth'
+    mood = eval(pretrained_model_name, model_path, 
+                [
+                    '不会水的旱鸭子在这里…咦,最右边那个看起来我不认识的...,肥星占了半张照片,林广还啃玉米!!!~ ~ ~ 好暗啊~ 都看不怎么清我们的俊容了~ ~ 凳凳凳灯...红花湖游泳照终于出炉啦~ ~ ~'
+                 ])
+    print(mood)
     
     
 
